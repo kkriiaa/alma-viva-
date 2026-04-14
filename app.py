@@ -19,13 +19,27 @@ country_coords = {
     "south africa": (-30.5595, 22.9375)
 }
 
+region_coords = {
+    "africa": (1.5, 17.3),
+    "asia": (34.0, 100.0),
+    "europe": (54.5, 15.0),
+    "north america": (54.5, -105.0)
+}
+
 df["primary_country"] = df["country_of_activity"].str.split("|").str[0].str.strip().str.lower()
 
-def get_coords(country):
-    return country_coords.get(country, (0, 0))
+def get_coords(row):
+    country = row["primary_country"]
+    region = row["region"].lower()
+    if country in country_coords:
+        return country_coords[country]
+    elif region in region_coords:
+        return region_coords[region]
+    else:
+        return (0, 0)
 
-df["lat"] = df["primary_country"].apply(lambda x: get_coords(x)[0])
-df["lon"] = df["primary_country"].apply(lambda x: get_coords(x)[1])
+df["lat"] = df.apply(lambda x: get_coords(x)[0], axis=1)
+df["lon"] = df.apply(lambda x: get_coords(x)[1], axis=1)
 
 df["main_text"] = (
     (df["main_objective"].fillna('') + " ") * 3 +
@@ -64,7 +78,7 @@ def compute_skill_score(volunteer_skills, ngo_text):
     matches = sum(1 for skill in volunteer_skills if skill.lower() in ngo_text)
     return matches / len(volunteer_skills) if volunteer_skills else 0
 
-def diversify_results(df_sorted, similarity_matrix, top_n=5, threshold=0.7):
+def diversify_results(df_sorted, similarity_matrix, top_n=20, threshold=0.7):
     selected_indices = []
     for idx in df_sorted.index:
         if not selected_indices:
@@ -85,7 +99,7 @@ def diversify_results(df_sorted, similarity_matrix, top_n=5, threshold=0.7):
     
     return df_sorted.loc[selected_indices]
 
-def match_volunteer_final(volunteer, top_n=5):
+def match_volunteer_final(volunteer, top_n=20):
     query = build_query(volunteer)
     region = map_location_to_region(volunteer["location"])
     
@@ -125,20 +139,20 @@ def match_volunteer_final(volunteer, top_n=5):
     ]]
 
 st.markdown("""
-    <h1 style='text-align: center;'> AI Volunteer–NGO Matching System</h1>
+    <h1 style='text-align: center;'>AI Volunteer NGO Matching System</h1>
     <p style='text-align: center; font-size:18px;'>Find NGOs tailored to your skills and interests</p>
 """, unsafe_allow_html=True)
 
 col1, col2 = st.columns(2)
 
 with col1:
-    skills = st.text_input(" Skills (comma separated)")
-    interest = st.text_input(" Interest")
+    skills = st.text_input("Skills (comma separated)")
+    interest = st.text_input("Interest")
 
 with col2:
-    location = st.text_input(" Location")
+    location = st.text_input("Location")
     st.write("")
-    find = st.button("🔍 Find NGOs")
+    find = st.button("Find NGOs")
 
 if find:
     volunteer = {
@@ -147,20 +161,20 @@ if find:
         "location": location
     }
     
-    results = match_volunteer_final(volunteer)
+    results = match_volunteer_final(volunteer, top_n=20)
     
-    st.markdown(" Top Matches")
+    st.markdown("## Top Matches")
     
     for _, row in results.iterrows():
         st.markdown(f"""
-        {row['org_name']}
-        {row['region']}  
-         {row['country_of_activity']}  
-         Score: {round(row['final_score'], 3)}
+        ### {row['org_name']}
+        Region: {row['region']}  
+        Country: {row['country_of_activity']}  
+        Score: {round(row['final_score'], 3)}
         """)
         st.markdown("---")
     
-    st.markdown("NGO Locations")
+    st.markdown("## NGO Locations")
     
     map_data = results.rename(columns={"lat": "latitude", "lon": "longitude"})
     st.map(map_data)
